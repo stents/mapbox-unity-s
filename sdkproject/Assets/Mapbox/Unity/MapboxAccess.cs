@@ -231,8 +231,13 @@ namespace Mapbox.Unity
 			, string tilesetId = null
 		)
 		{
-			return _fileSource.Request(url, callback, _configuration.DefaultTimeout, tileId, tilesetId);
+            return _fileSource.Request(url, callback, _configuration.DefaultTimeout, tileId, tilesetId);
 		}
+
+		public Texture2D GetFallbackTexture(CanonicalTileId tileId)
+		{
+			return _fileSource.GetSubTexture(tileId);
+        }
 
 
 		Geocoder _geocoder;

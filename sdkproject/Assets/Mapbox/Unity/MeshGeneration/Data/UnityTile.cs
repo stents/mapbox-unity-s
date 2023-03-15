@@ -200,13 +200,19 @@ namespace Mapbox.Unity.MeshGeneration.Data
 
 			IsRecycled = false;
 
+            //CanonicalTileId fallbackId = new CanonicalTileId(tileId.Canonical.Z - 1, tileId.Canonical.X / 2, tileId.Canonical.Y / 2);
+            Texture2D fallbackTexture = MapboxAccess.Instance.GetFallbackTexture(tileId.Canonical);
+            if (fallbackTexture != null)
+            {
+                MeshRenderer.material.mainTexture = fallbackTexture;
+            }
+			
+            // Setup Loading as initial state - Unregistered
+            // When tile registers with factories, it will set the appropriate state.
+            // None, if Factory source is None, Loading otherwise.
+        }
 
-			// Setup Loading as initial state - Unregistered
-			// When tile registers with factories, it will set the appropriate state.
-			// None, if Factory source is None, Loading otherwise.
-		}
-
-		internal void Recycle()
+        internal void Recycle()
 		{
 			if (_loadingTexture && MeshRenderer != null && MeshRenderer.sharedMaterial != null)
 			{

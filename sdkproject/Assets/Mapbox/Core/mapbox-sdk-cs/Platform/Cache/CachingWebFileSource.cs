@@ -7,7 +7,7 @@
 	using Mapbox.Map;
 	using System.Collections;
 	using System.Linq;
-
+	using UnityEngine;
 
 	public class CachingWebFileSource : IFileSource, IDisposable
 	{
@@ -21,7 +21,7 @@
 		private string _accessToken;
 		private Func<string> _getMapsSkuToken;
 		private bool _autoRefreshCache;
-
+		private string _defaultTilesetId = null;
 
 		public CachingWebFileSource(string accessToken, Func<string> getMapsSkuToken, bool autoRefreshCache)
 		{
@@ -34,7 +34,7 @@
 		}
 
 
-#region idisposable
+		#region idisposable
 
 
 		~CachingWebFileSource()
@@ -69,7 +69,7 @@
 		}
 
 
-#endregion
+		#endregion
 
 
 		/// <summary>
@@ -102,13 +102,29 @@
 		}
 
 
-		public void ReInit() {
+		public void ReInit()
+		{
 			foreach (var cache in _caches)
 			{
 				cache.ReInit();
 			}
 		}
 
+		private CacheItem GetCachedItem(string tilesetId, CanonicalTileId tileId)
+		{
+			CacheItem cachedItem = null;
+			// go through existing caches and check if we already have the requested tile available
+			foreach (var cache in _caches)
+			{
+				cachedItem = cache.Get(tilesetId, tileId);
+				if (null != cachedItem)
+				{
+					break;
+				}
+			}
+			return cachedItem;
+
+		}
 
 		public IAsyncRequest Request(
 			string uri
@@ -123,18 +139,9 @@
 			{
 				throw new Exception("Cannot cache without a tileset id");
 			}
-
-			CacheItem cachedItem = null;
-
-			// go through existing caches and check if we already have the requested tile available
-			foreach (var cache in _caches)
-			{
-				cachedItem = cache.Get(tilesetId, tileId);
-				if (null != cachedItem)
-				{
-					break;
-				}
-			}
+			
+			_defaultTilesetId = tilesetId;
+			CacheItem cachedItem = GetCachedItem(tilesetId, tileId);
 
 			var uriBuilder = new UriBuilder(uri);
 			if (!string.IsNullOrEmpty(_accessToken))
@@ -233,6 +240,39 @@
 			}
 		}
 
+		public Texture2D GetSubTexture(CanonicalTileId tileId, int recursions = 1)
+		{
+			if (_defaultTilesetId == null)
+				return null;
+			 
+			int divisions = (int)Math.Pow(2, recursions);
+
+			CanonicalTileId higherTileId = new CanonicalTileId(tileId.Z - recursions, tileId.X / divisions, tileId.Y / divisions);
+			CacheItem higherCachedItem = GetCachedItem(_defaultTilesetId, higherTileId);
+			if (higherCachedItem != null)
+			{
+				Texture2D t = new Texture2D(2, 2);
+				t.LoadImage(higherCachedItem.Data);
+
+				int xOffset = (tileId.X % divisions);
+				int yOffset = (divisions - 1) - (tileId.Y % divisions);
+
+				int size = t.width / divisions;
+
+				if (size > 0)
+				{
+					Texture2D t2 = new Texture2D(size, size, t.format, false);
+					t2.wrapMode = TextureWrapMode.Clamp;
+					Graphics.CopyTexture(t, 0, 0, xOffset * size, yOffset * size, size, size, t2, 0, 0, 0, 0);
+					return t2;
+				}
+			}
+			else if (recursions < 7) // Limit checking up to 7 levels higher, otherwise we will not have enough texture data to copy
+			{
+				return GetSubTexture(tileId, recursions + 1);
+			}
+			return null;
+		}
 
 		private IAsyncRequest requestTileAndCache(string url, string tilesetId, CanonicalTileId tileId, int timeout, Action<Response> callback)
 		{
@@ -307,10 +347,8 @@
 					return true;
 				}
 			}
-
-
+			
 			public HttpRequestType RequestType { get { return HttpRequestType.Get; } }
-
 
 			public void Cancel()
 			{
